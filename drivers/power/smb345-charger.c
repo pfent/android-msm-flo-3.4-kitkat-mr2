@@ -109,9 +109,6 @@
 #define BAT_Mid_Temp_Wireless 40
 #define FLOAT_VOLT 0x2A
 #define FLOAT_VOLT_LOW 0x1E
-//#define FLOAT_VOLT_43V 0x28 // Full charge: 4.27V
-//#define FLOAT_VOLT_43V 0x24 // 4.19V -> probably 20mV steps
-#define FLOAT_VOLT_43V 0x19 // 15 * 20mV = 0.3V, resulting voltage should be: ~4.0V
 #define FLOAT_VOLT_LOW_DECIMAL 4110000
 #define THERMAL_RULE1 1
 #define THERMAL_RULE2 2
@@ -134,6 +131,32 @@ extern int ac_on;
 extern int usb_on;
 static bool wpc_en;
 static bool disable_DCIN;
+
+/*
+ * Maximum charging voltage. In 20mV increments from a base value of 3.5V.
+ * Should be in range 3.5V to 4.3V, respectively 0x00 to 0x28
+ */
+static int float_volt_max = 0x19;
+
+static ssize_t show_float_volt_max(struct kobject *kobj, struct kobj_attribute *attr, char *buf) {
+    return sprintf(buf, "%d\n", float_volt_max);
+}
+
+static ssize_t store_float_volt_max(struct kobject *kobj, struct kobj_attribute *attr, const char *buf, size_t count) {
+    unsigned res;
+    sscanf(buf, "%u", &res);
+
+    if(res > 0x28) {
+        res = 0x28;
+    }
+
+    float_volt_max = res;
+    return count;
+}
+
+
+static struct kobj_attribute fvm_attrb = __ATTR(float_volt_max, 0666, show_float_volt_max, store_float_volt_max);
+static struct kobject *kobj;
 
 /* Sysfs interface */
 static DEVICE_ATTR(reg_status, S_IWUSR | S_IRUGO, smb345_reg_show, NULL);
@@ -317,9 +340,9 @@ int smb345_vflt_setting(void)
 	}
 
 	setting = ret & FLOAT_VOLT_MASK;
-	if (setting != FLOAT_VOLT_43V) {
+	if (setting != float_volt_max) {
 		setting = ret & (~FLOAT_VOLT_MASK);
-		setting |= FLOAT_VOLT_43V;
+		setting |= float_volt_max;
 		SMB_NOTICE("Set Float Volt, retval=%x setting=%x\n", ret, setting);
 		ret = smb345_write(client, smb345_FLOAT_VLTG, setting);
 		if (ret < 0) {
@@ -1132,9 +1155,9 @@ int smb345_config_thermal_charging(int temp, int volt, int rule)
 	if (temp <= BAT_Mid_Temp
 		|| (temp > BAT_Mid_Temp && volt > FLOAT_VOLT_LOW_DECIMAL)
 		|| temp > BAT_Hot_Limit) {
-		if (setting != FLOAT_VOLT_43V) {
+		if (setting != float_volt_max) {
 			setting = retval & (~FLOAT_VOLT_MASK);
-			setting |= FLOAT_VOLT_43V;
+			setting |= float_volt_max;
 			SMB_NOTICE("Set Float Volt, retval=%x setting=%x\n", retval, setting);
 			ret = smb345_write(client, smb345_FLOAT_VLTG, setting);
 			if (ret < 0) {
@@ -1355,6 +1378,18 @@ static struct i2c_driver smb345_i2c_driver = {
 
 static int __init smb345_init(void)
 {
+    int ret;
+    kobj = kobject_create_and_add("smb345_maxV", NULL);
+    if (!kobj) {
+        return -ENOMEM;
+    }
+
+    ret = sysfs_create_file(kobj, &fvm_attrb.attr);
+    if (ret) {
+        kobject_put(kobj);
+        return ret;
+    }
+
 	return i2c_add_driver(&smb345_i2c_driver);
 }
 module_init(smb345_init);
