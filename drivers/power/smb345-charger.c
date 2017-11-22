@@ -109,7 +109,9 @@
 #define BAT_Mid_Temp_Wireless 40
 #define FLOAT_VOLT 0x2A
 #define FLOAT_VOLT_LOW 0x1E
-#define FLOAT_VOLT_43V 0x24
+//#define FLOAT_VOLT_43V 0x28 // Full charge: 4.27V
+//#define FLOAT_VOLT_43V 0x24 // 4.19V -> probably 20mV steps
+#define FLOAT_VOLT_43V 0x19 // 15 * 20mV = 0.3V, resulting voltage should be: ~4.0V
 #define FLOAT_VOLT_LOW_DECIMAL 4110000
 #define THERMAL_RULE1 1
 #define THERMAL_RULE2 2
